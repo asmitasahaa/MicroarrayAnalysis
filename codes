@@ -1,0 +1,72 @@
+# Set working directory
+
+# Load libraries 
+library(affy)
+library(affyPLM)
+library(GEOquery)
+library(tidyverse)
+library(arrayQualityMetrics)
+library(moments)
+install.packages('moments')
+
+# Get supplementary files 
+getGEOSuppFiles("GSE29652")
+
+# Untar files 
+untar("GSE29652/GSE29652_RAW.tar", exdir = 'data/')
+
+# Reading .CEL files 
+raw_data = ReadAffy(celfile.path = "data/")
+
+# Get expression of raw data 
+raw_exprs = exprs(raw_data)
+
+# Perform RMA normalisation
+normalised_data = rma(raw_data)
+
+# Get expression estimates 
+normalised_exprs = as.data.frame(exprs(normalised_data)) 
+
+# Boxplot of raw data
+boxplot(normalised_exprs, main = "Boxplot of Normalized Data", col = "lightblue")
+dev.copy(tiff, filename = "GSE29652_Boxplot.tiff")
+dev.off()
+
+# Boxplot of normalized data
+boxplot(raw_exprs, main = "Boxplot of Raw Data", col = "lightblue")
+dev.copy(tiff, filename = "GSE29652_Boxplot_Raw.tiff")
+dev.off()
+
+# Perform QC 
+qc_results = arrayQualityMetrics(normalised_data, outdir = "QC_results")
+
+# Extract metrics
+qc_metrics = data.frame(
+  Samples = colnames(normalised_exprs),
+  Mean = colMeans(normalised_exprs),
+  SD = apply(normalised_exprs, 2, sd),
+  MAD = apply(normalised_exprs, 2, mad),  
+  CV = apply(normalised_exprs, 2, function(x) sd(x) / mean(x) * 100),  
+  IQR = apply(normalised_exprs, 2, IQR),  
+  Kurtosis = apply(normalised_exprs, 2, function(x) kurtosis(x, na.rm = TRUE)),
+  Missing_Values_Percentage = apply(normalised_exprs, 2, function(x) sum(is.na(x)) / length(x) * 100),
+  SNR = apply(normalised_exprs, 2, function(x) mean(x) / sd(x)),
+  Dynamic_Range = apply(normalised_exprs, 2, function(x) diff(range(x, na.rm = TRUE)))
+)
+
+# Calculate Relative Log Expression (RLE)
+reference_sample = median(normalised_exprs, na.rm = TRUE)  
+RLE = apply(normalised_exprs, 2, function(x) log2(x / reference_sample))
+
+# Add RLE to QC metrics data frame
+qc_metrics$RLE = apply(RLE, 2, median, na.rm = TRUE)  
+
+# Calculate NUSE
+nuse = calcNormFactors(normalised_data, method = "TMM")
+
+# Add NUSE to QC metrics data frame
+qc_metrics$NUSE = nuse
+
+# Write as CSV file
+write.csv(qc_metrics, file = "QC_report.csv", row.names = FALSE) 
+
