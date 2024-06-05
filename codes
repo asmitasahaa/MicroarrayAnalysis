@@ -55,8 +55,9 @@ qc_metrics = data.frame(
 )
 
 # Calculate Relative Log Expression (RLE)
-reference_sample = median(normalised_exprs, na.rm = TRUE)  
-RLE = apply(normalised_exprs, 2, function(x) log2(x / reference_sample))
+reference_sample = apply(normalised_exprs, 1, median, na.rm = TRUE)  # Calculate the median for each row (gene)
+reference_matrix = matrix(reference_sample, nrow = nrow(normalised_exprs), ncol = ncol(normalised_exprs), byrow = FALSE)
+RLE = log2(normalised_exprs / reference_matrix) 
 
 # Add RLE to QC metrics data frame
 qc_metrics$RLE = apply(RLE, 2, median, na.rm = TRUE)  
